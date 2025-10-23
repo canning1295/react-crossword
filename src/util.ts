@@ -229,11 +229,31 @@ export function loadGuesses(gridData: GuessData, storageKey: string) {
   if (!saveRaw) {
     return;
   }
+  // Be resilient to corrupted or non-JSON data in storage
+  let saveData: unknown;
+  try {
+    saveData = JSON.parse(saveRaw);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('react-crossword: unable to parse saved guesses from storage');
+    return;
+  }
 
-  const saveData = JSON.parse(saveRaw);
+  // Ensure expected shape before attempting to load
+  if (
+    !saveData ||
+    typeof saveData !== 'object' ||
+    !('guesses' in saveData) ||
+    typeof (saveData as { guesses: unknown }).guesses !== 'object'
+  ) {
+    return;
+  }
 
   // TODO: check date for expiration?
-  deserializeGuesses(gridData, saveData.guesses);
+  deserializeGuesses(
+    gridData,
+    (saveData as { guesses: Record<string, string> }).guesses
+  );
 }
 
 export function deserializeGuesses(
