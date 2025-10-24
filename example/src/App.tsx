@@ -9,8 +9,13 @@ import Crossword, {
   DirectionClues,
   useIpuz,
 } from '@jaredreisinger/react-crossword';
-import styled from 'styled-components';
+import styled, {
+  ThemeProvider,
+  createGlobalStyle,
+  keyframes,
+} from 'styled-components';
 import DbVerification from './DbVerification';
+import { puzzles, getPuzzlesByDifficulty, PuzzleData } from './puzzleData';
 
 const data = {
   across: {
@@ -238,18 +243,340 @@ const ipuzData = {
   ],
 };
 
+const GlobalStyle = createGlobalStyle<{ darkMode: boolean }>`
+  * {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: ${(props) => (props.darkMode ? '#1a1a2e' : '#f5f5f5')};
+    color: ${(props) => (props.darkMode ? '#eee' : '#333')};
+    transition: all 0.3s ease;
+  }
+`;
+
 const Page = styled.div`
-  padding: 2em;
+  min-height: 100vh;
+  padding: 1em;
+
+  @media (min-width: 768px) {
+    padding: 2em;
+  }
 `;
 
-const Header = styled.h1`
+const Header = styled.header`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1em;
+  margin-bottom: 1.5em;
+  padding-bottom: 1em;
+  border-bottom: 2px solid ${(props) => props.theme.borderColor || '#ddd'};
+
+  h1 {
+    margin: 0;
+    font-size: 1.5em;
+
+    @media (min-width: 768px) {
+      font-size: 2em;
+    }
+  }
+`;
+
+const HeaderControls = styled.div`
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+  flex-wrap: wrap;
+`;
+
+const ThemeToggle = styled.button`
+  background: ${(props) => props.theme.buttonBg || '#007bff'};
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5em 1em;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const GameContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1.5em;
+  max-width: 1400px;
+  margin: 0 auto;
+
+  @media (min-width: 1024px) {
+    flex-direction: row;
+    gap: 2em;
+  }
+`;
+
+const GamePanel = styled.div`
+  flex: 1;
+  background: ${(props) => props.theme.panelBg || 'white'};
+  border-radius: 12px;
+  padding: 1.5em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+`;
+
+const ControlPanel = styled.div`
+  width: 100%;
+
+  @media (min-width: 1024px) {
+    width: 320px;
+    flex-shrink: 0;
+  }
+`;
+
+const ControlSection = styled.div`
+  margin-bottom: 1.5em;
+
+  h3 {
+    margin: 0 0 1em 0;
+    font-size: 1.1em;
+    color: ${(props) => props.theme.headingColor || '#333'};
+  }
+`;
+
+const ButtonGroup = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75em;
+`;
+
+const Button = styled.button<{
+  variant?: 'primary' | 'secondary' | 'success' | 'danger';
+}>`
+  background: ${(props) => {
+    switch (props.variant) {
+      case 'primary':
+        return '#007bff';
+      case 'success':
+        return '#28a745';
+      case 'danger':
+        return '#dc3545';
+      default:
+        return '#6c757d';
+    }
+  }};
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const StatsDisplay = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1em;
+  margin-bottom: 1.5em;
+`;
+
+const StatCard = styled.div`
+  background: ${(props) => props.theme.statBg || '#f8f9fa'};
+  padding: 1em;
+  border-radius: 8px;
+  text-align: center;
+
+  .label {
+    font-size: 0.85em;
+    color: ${(props) => props.theme.mutedText || '#666'};
+    margin-bottom: 0.5em;
+  }
+
+  .value {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: ${(props) => props.theme.primaryColor || '#007bff'};
+  }
+`;
+
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 24px;
+  background: ${(props) => props.theme.progressBg || '#e9ecef'};
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1.5em;
+  position: relative;
+`;
+
+const ProgressFill = styled.div<{ progress: number }>`
+  height: 100%;
+  width: ${(props) => props.progress}%;
+  background: linear-gradient(90deg, #28a745, #20c997);
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.85em;
+  font-weight: 600;
+`;
+
+const PuzzleSelector = styled.div`
+  margin-bottom: 1.5em;
+`;
+
+const DifficultyTabs = styled.div`
+  display: flex;
+  gap: 0.5em;
   margin-bottom: 1em;
+  flex-wrap: wrap;
 `;
 
-const Commands = styled.div``;
+const DifficultyTab = styled.button<{ active?: boolean }>`
+  padding: 0.5em 1em;
+  border: 2px solid
+    ${(props) =>
+      props.active ? props.theme.primaryColor : props.theme.borderColor};
+  background: ${(props) =>
+    props.active ? props.theme.primaryColor : 'transparent'};
+  color: ${(props) =>
+    props.active ? 'white' : props.theme.textColor || '#333'};
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+`;
+
+const PuzzleGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1em;
+  margin-bottom: 1.5em;
+`;
+
+const PuzzleCard = styled.div<{ selected?: boolean }>`
+  padding: 1em;
+  background: ${(props) =>
+    props.selected ? props.theme.primaryColor : props.theme.statBg};
+  color: ${(props) => (props.selected ? 'white' : 'inherit')};
+  border: 2px solid
+    ${(props) => (props.selected ? props.theme.primaryColor : 'transparent')};
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  h4 {
+    margin: 0 0 0.5em 0;
+    font-size: 1em;
+  }
+
+  .info {
+    font-size: 0.85em;
+    opacity: 0.8;
+  }
+`;
+
+const celebrate = keyframes`
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+`;
+
+const CelebrationModal = styled.div<{ show: boolean }>`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: ${(props) => (props.show ? 'flex' : 'none')};
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: ${celebrate} 0.5s ease;
+`;
+
+const CelebrationContent = styled.div`
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 3em;
+  border-radius: 16px;
+  text-align: center;
+  color: white;
+  max-width: 90%;
+
+  h2 {
+    font-size: 2.5em;
+    margin: 0 0 0.5em 0;
+  }
+
+  p {
+    font-size: 1.2em;
+    margin: 0.5em 0;
+  }
+
+  button {
+    margin-top: 1.5em;
+    padding: 0.75em 2em;
+    background: white;
+    color: #667eea;
+    border: none;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      transform: scale(1.05);
+    }
+  }
+`;
+
+const Commands = styled.div`
+  display: none;
+`;
 
 const Command = styled.button`
-  margin-right: 1em;
+  display: none;
 `;
 
 const CrosswordMessageBlock = styled.div`
@@ -322,26 +649,173 @@ const Messages = styled.pre`
   overflow: auto;
 `;
 
-// in order to make this a more-comprehensive example, and to vet Crossword's
-// features, we actually implement a fair amount...
-
+// Enhanced crossword game with modern features
 function App() {
   const crossword = useRef<CrosswordImperative>(null);
+
+  // Theme state
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Puzzle selection
+  const [selectedDifficulty, setSelectedDifficulty] = useState<
+    'easy' | 'medium' | 'hard'
+  >('easy');
+  const [selectedPuzzle, setSelectedPuzzle] = useState<PuzzleData>(puzzles[0]);
+  const [showCelebration, setShowCelebration] = useState(false);
+
+  // Game state
+  const [timer, setTimer] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [completedClues, setCompletedClues] = useState(0);
+  const [totalClues, setTotalClues] = useState(
+    Object.keys(selectedPuzzle.data.across).length +
+      Object.keys(selectedPuzzle.data.down).length
+  );
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [currentDirection, setCurrentDirection] = useState<'across' | 'down'>(
+    'across'
+  );
+  const [currentNumber, setCurrentNumber] = useState('1');
+
+  // Update total clues when puzzle changes
+  useEffect(() => {
+    setTotalClues(
+      Object.keys(selectedPuzzle.data.across).length +
+        Object.keys(selectedPuzzle.data.down).length
+    );
+  }, [selectedPuzzle]);
+
+  // Timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  // Format timer display
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const theme = {
+    borderColor: darkMode ? '#333' : '#ddd',
+    buttonBg: darkMode ? '#0d6efd' : '#007bff',
+    panelBg: darkMode ? '#16213e' : 'white',
+    headingColor: darkMode ? '#eee' : '#333',
+    statBg: darkMode ? '#0f3460' : '#f8f9fa',
+    mutedText: darkMode ? '#aaa' : '#666',
+    primaryColor: darkMode ? '#0d6efd' : '#007bff',
+    progressBg: darkMode ? '#0f3460' : '#e9ecef',
+    // Crossword theme
+    columnBreakpoint: '768px',
+    gridBackground: darkMode ? '#0f3460' : 'rgb(0,0,0)',
+    cellBackground: darkMode ? '#16213e' : 'rgb(255,255,255)',
+    cellBorder: darkMode ? '#333' : 'rgb(0,0,0)',
+    textColor: darkMode ? '#eee' : 'rgb(0,0,0)',
+    numberColor: darkMode ? 'rgba(255,255,255, 0.3)' : 'rgba(0,0,0, 0.25)',
+    focusBackground: darkMode ? 'rgb(255,200,0)' : 'rgb(255,255,0)',
+    highlightBackground: darkMode
+      ? 'rgba(255,255,100,0.3)'
+      : 'rgb(255,255,204)',
+  };
 
   const focus = useCallback<React.MouseEventHandler>((event) => {
     crossword.current?.focus();
   }, []);
 
-  const fillOneCell = useCallback<React.MouseEventHandler>((event) => {
-    crossword.current?.setGuess(0, 2, 'O');
+  // Handle puzzle selection
+  const selectPuzzle = useCallback((puzzle: PuzzleData) => {
+    setSelectedPuzzle(puzzle);
+    setTimer(0);
+    setIsPlaying(false);
+    setCompletedClues(0);
+    setHintsUsed(0);
+    setShowCelebration(false);
+    // Reset crossword will happen via key change
   }, []);
 
-  const fillAllAnswers = useCallback<React.MouseEventHandler>((event) => {
-    crossword.current?.fillAllAnswers();
+  // Reveal one letter hint
+  const revealLetter = useCallback<React.MouseEventHandler>(
+    (event) => {
+      if (!isPlaying) setIsPlaying(true);
+
+      const acrossData: any = selectedPuzzle.data.across;
+      const downData: any = selectedPuzzle.data.down;
+      const clueData =
+        currentDirection === 'across'
+          ? acrossData[currentNumber]
+          : downData[currentNumber];
+
+      if (clueData) {
+        const { row, col, answer } = clueData;
+        // Find first empty cell in current word and fill it
+        let filled = false;
+        for (let i = 0; i < answer.length; i++) {
+          const targetRow = currentDirection === 'across' ? row : row + i;
+          const targetCol = currentDirection === 'across' ? col + i : col;
+          const letter = answer[i];
+
+          // Check if cell is empty (this is simplified - you'd need to check actual state)
+          crossword.current?.setGuess(targetRow, targetCol, letter);
+          if (!filled) {
+            setHintsUsed((prev) => prev + 1);
+            filled = true;
+            break;
+          }
+        }
+      }
+    },
+    [currentDirection, currentNumber, isPlaying]
+  );
+
+  // Reveal word hint
+  const revealWord = useCallback<React.MouseEventHandler>(
+    (event) => {
+      if (!isPlaying) setIsPlaying(true);
+
+      const acrossData: any = selectedPuzzle.data.across;
+      const downData: any = selectedPuzzle.data.down;
+      const clueData =
+        currentDirection === 'across'
+          ? acrossData[currentNumber]
+          : downData[currentNumber];
+
+      if (clueData) {
+        const { row, col, answer } = clueData;
+        // Fill entire word
+        for (let i = 0; i < answer.length; i++) {
+          const targetRow = currentDirection === 'across' ? row : row + i;
+          const targetCol = currentDirection === 'across' ? col + i : col;
+          crossword.current?.setGuess(targetRow, targetCol, answer[i]);
+        }
+        setHintsUsed((prev) => prev + answer.length);
+      }
+    },
+    [currentDirection, currentNumber, isPlaying]
+  );
+
+  // Reveal entire puzzle
+  const revealPuzzle = useCallback<React.MouseEventHandler>((event) => {
+    if (window.confirm('Are you sure you want to reveal the entire puzzle?')) {
+      crossword.current?.fillAllAnswers();
+      setIsPlaying(false);
+    }
   }, []);
 
   const reset = useCallback<React.MouseEventHandler>((event) => {
-    crossword.current?.reset();
+    if (window.confirm('Reset the puzzle? This will clear all progress.')) {
+      crossword.current?.reset();
+      setTimer(0);
+      setIsPlaying(false);
+      setCompletedClues(0);
+      setHintsUsed(0);
+    }
   }, []);
 
   // We don't really *do* anything with callbacks from the Crossword component,
@@ -370,8 +844,10 @@ function App() {
   const onCorrect = useCallback<Required<CrosswordProps>['onCorrect']>(
     (direction, number, answer) => {
       addMessage(`onCorrect: "${direction}", "${number}", "${answer}"`);
+      setCompletedClues((prev) => prev + 1);
+      if (!isPlaying) setIsPlaying(true);
     },
-    [addMessage]
+    [addMessage, isPlaying]
   );
 
   // onLoadedCorrect is called with an array of the already-correct answers,
@@ -399,6 +875,10 @@ function App() {
   >(
     (isCorrect) => {
       addMessage(`onCrosswordCorrect: ${JSON.stringify(isCorrect)}`);
+      if (isCorrect) {
+        setIsPlaying(false);
+        setShowCelebration(true);
+      }
     },
     [addMessage]
   );
@@ -407,8 +887,18 @@ function App() {
   const onCellChange = useCallback<Required<CrosswordProps>['onCellChange']>(
     (row, col, char) => {
       addMessage(`onCellChange: "${row}", "${col}", "${char}"`);
+      if (!isPlaying && char) setIsPlaying(true);
     },
-    [addMessage]
+    [addMessage, isPlaying]
+  );
+
+  // Track clue selection
+  const onClueSelected = useCallback(
+    (direction: 'across' | 'down', number: string) => {
+      setCurrentDirection(direction);
+      setCurrentNumber(number);
+    },
+    []
   );
 
   // all the same functionality, but for the decomposed CrosswordProvider
@@ -509,42 +999,209 @@ function App() {
 
   const fromIpuz = useIpuz(ipuzData);
 
+  const progress =
+    totalClues > 0 ? Math.round((completedClues / totalClues) * 100) : 0;
+  const filteredPuzzles = getPuzzlesByDifficulty(selectedDifficulty);
+
   return (
-    <Page>
-      <Header>@jaredreisinger/react-crossword example app</Header>
+    <ThemeProvider theme={theme}>
+      <GlobalStyle darkMode={darkMode} />
+      <Page>
+        <Header>
+          <h1>🎯 Classic Crossword Puzzle</h1>
+          <HeaderControls>
+            <ThemeToggle onClick={() => setDarkMode(!darkMode)}>
+              {darkMode ? '☀️ Light' : '🌙 Dark'}
+            </ThemeToggle>
+            <DbVerification />
+          </HeaderControls>
+        </Header>
 
-      <p>
-        This is a demo app that makes use of the @jaredreisinger/react-crossword
-        component. It exercises most of the functionality, so that you can see
-        how to do so.
-      </p>
+        <GamePanel>
+          <PuzzleSelector role="region" aria-label="Puzzle Selection">
+            <h3>Select a Puzzle</h3>
+            <DifficultyTabs role="tablist" aria-label="Difficulty levels">
+              <DifficultyTab
+                role="tab"
+                aria-selected={selectedDifficulty === 'easy'}
+                aria-label="Easy difficulty puzzles"
+                active={selectedDifficulty === 'easy'}
+                onClick={() => setSelectedDifficulty('easy')}
+              >
+                😊 Easy
+              </DifficultyTab>
+              <DifficultyTab
+                role="tab"
+                aria-selected={selectedDifficulty === 'medium'}
+                aria-label="Medium difficulty puzzles"
+                active={selectedDifficulty === 'medium'}
+                onClick={() => setSelectedDifficulty('medium')}
+              >
+                🤔 Medium
+              </DifficultyTab>
+              <DifficultyTab
+                role="tab"
+                aria-selected={selectedDifficulty === 'hard'}
+                aria-label="Hard difficulty puzzles"
+                active={selectedDifficulty === 'hard'}
+                onClick={() => setSelectedDifficulty('hard')}
+              >
+                🔥 Hard
+              </DifficultyTab>
+            </DifficultyTabs>
+            <PuzzleGrid role="list" aria-label="Available puzzles">
+              {filteredPuzzles.map((puzzle) => (
+                <PuzzleCard
+                  key={puzzle.id}
+                  role="listitem"
+                  selected={puzzle.id === selectedPuzzle.id}
+                  onClick={() => selectPuzzle(puzzle)}
+                  aria-label={`${puzzle.title}, ${
+                    puzzle.difficulty
+                  } difficulty, ${
+                    Object.keys(puzzle.data.across).length +
+                    Object.keys(puzzle.data.down).length
+                  } clues`}
+                  tabIndex={0}
+                  onKeyPress={(e) => e.key === 'Enter' && selectPuzzle(puzzle)}
+                >
+                  <h4>{puzzle.title}</h4>
+                  <div className="info">
+                    {puzzle.author && `by ${puzzle.author}`}
+                  </div>
+                  <div className="info">
+                    {Object.keys(puzzle.data.across).length +
+                      Object.keys(puzzle.data.down).length}{' '}
+                    clues
+                  </div>
+                </PuzzleCard>
+              ))}
+            </PuzzleGrid>
+          </PuzzleSelector>
+        </GamePanel>
 
-      <DbVerification />
+        <GameContainer>
+          <GamePanel>
+            <h3>{selectedPuzzle.title}</h3>
+            <ProgressBar>
+              <ProgressFill progress={progress}>
+                {progress}% Complete
+              </ProgressFill>
+            </ProgressBar>
 
-      <Commands>
-        <Command onClick={focus}>Focus</Command>
-        <Command onClick={fillOneCell}>Fill the first letter of 2-down</Command>
-        <Command onClick={fillAllAnswers}>Fill all answers</Command>
-        <Command onClick={reset}>Reset</Command>
-        <Command onClick={clearMessages}>Clear messages</Command>
-      </Commands>
+            <CrosswordWrapper>
+              <Crossword
+                key={selectedPuzzle.id}
+                ref={crossword}
+                data={selectedPuzzle.data}
+                storageKey={`crossword-${selectedPuzzle.id}`}
+                onCorrect={onCorrect}
+                onLoadedCorrect={onLoadedCorrect}
+                onCrosswordCorrect={onCrosswordCorrect}
+                onCellChange={onCellChange}
+                onClueSelected={onClueSelected}
+                theme={theme}
+              />
+            </CrosswordWrapper>
+          </GamePanel>
 
-      <CrosswordMessageBlock>
-        <CrosswordWrapper>
-          <Crossword
-            ref={crossword}
-            data={data}
-            storageKey="first-example"
-            onCorrect={onCorrect}
-            onLoadedCorrect={onLoadedCorrect}
-            onCrosswordCorrect={onCrosswordCorrect}
-            onCellChange={onCellChange}
-          />
-        </CrosswordWrapper>
+          <ControlPanel>
+            <GamePanel>
+              <ControlSection>
+                <h3>📊 Game Stats</h3>
+                <StatsDisplay>
+                  <StatCard>
+                    <div className="label">Time</div>
+                    <div className="value">{formatTime(timer)}</div>
+                  </StatCard>
+                  <StatCard>
+                    <div className="label">Completed</div>
+                    <div className="value">
+                      {completedClues}/{totalClues}
+                    </div>
+                  </StatCard>
+                  <StatCard>
+                    <div className="label">Hints Used</div>
+                    <div className="value">{hintsUsed}</div>
+                  </StatCard>
+                  <StatCard>
+                    <div className="label">Progress</div>
+                    <div className="value">{progress}%</div>
+                  </StatCard>
+                </StatsDisplay>
+              </ControlSection>
 
-        <Messages ref={messagesRef}>{messages}</Messages>
-      </CrosswordMessageBlock>
+              <ControlSection>
+                <h3>💡 Hint Options</h3>
+                <ButtonGroup role="group" aria-label="Hint controls">
+                  <Button
+                    variant="primary"
+                    onClick={revealLetter}
+                    aria-label="Reveal one letter in current word"
+                  >
+                    📝 Reveal Letter
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={revealWord}
+                    aria-label="Reveal entire current word"
+                  >
+                    📖 Reveal Word
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={revealPuzzle}
+                    aria-label="Reveal entire puzzle solution"
+                  >
+                    🔓 Reveal All
+                  </Button>
+                </ButtonGroup>
+              </ControlSection>
 
+              <ControlSection>
+                <h3>🎮 Game Controls</h3>
+                <ButtonGroup>
+                  <Button variant="primary" onClick={focus}>
+                    🎯 Focus Grid
+                  </Button>
+                  <Button variant="danger" onClick={reset}>
+                    🔄 Reset Puzzle
+                  </Button>
+                </ButtonGroup>
+              </ControlSection>
+
+              <ControlSection>
+                <h3>📋 Activity Log</h3>
+                <Messages ref={messagesRef}>{messages}</Messages>
+                <Button
+                  variant="secondary"
+                  onClick={clearMessages}
+                  style={{ marginTop: '0.5em', width: '100%' }}
+                >
+                  Clear Log
+                </Button>
+              </ControlSection>
+            </GamePanel>
+          </ControlPanel>
+        </GameContainer>
+
+        <CelebrationModal show={showCelebration}>
+          <CelebrationContent>
+            <h2>🎉 Congratulations! 🎉</h2>
+            <p>You completed the puzzle!</p>
+            <p>Time: {formatTime(timer)}</p>
+            <p>Hints used: {hintsUsed}</p>
+            <button onClick={() => setShowCelebration(false)}>Continue</button>
+          </CelebrationContent>
+        </CelebrationModal>
+      </Page>
+    </ThemeProvider>
+  );
+}
+
+export default App;
+
+/* OLD EXAMPLE CODE - PRESERVED FOR REFERENCE BUT NOT RENDERED
       <p>
         And here’s a decomposed version, showing more control of the individual
         components (intended for specific layout needs).
@@ -619,13 +1276,4 @@ function App() {
         </CrosswordProvider>
       </IpuzWrapper>
 
-      {/* <CrosswordMessageBlock> */}
-      {/* <CrosswordWrapper>
-          <Crossword data={fromIpuz!} storageKey="ipuz-example" />
-        </CrosswordWrapper> */}
-      {/* </CrosswordMessageBlock> */}
-    </Page>
-  );
-}
-
-export default App;
+*/

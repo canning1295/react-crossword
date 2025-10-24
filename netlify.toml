@@ -1,21 +1,55 @@
-# Netlify configuration for the React app
-# Building the example app which includes the crossword component demo
-# and Firebase database verification
+# Netlify configuration for Enhanced Crossword Puzzle Game
+# PWA-enabled crossword game with hints, timer, and Firebase integration
 
 [build]
   base = "example"
-  command = "npm run build"
+  command = "npm install && npm run build"
   publish = "build"
 
+# Enable forms if needed in the future
+# [build.processing]
+#   skip_processing = false
+
+# PWA and SPA routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Security headers can be added here if needed
-# [[headers]]
-#   for = "/*"
-#   [headers.values]
-#   X-Frame-Options = "SAMEORIGIN"
-#   X-Content-Type-Options = "nosniff"
-#   Referrer-Policy = "strict-origin-when-cross-origin"
+# Security and PWA headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+# Cache static assets
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Service worker - must not be cached
+[[headers]]
+  for = "/service-worker.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+# Manifest file
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=3600"
+
+# Environment variables can be set in Netlify dashboard for Firebase
+# REACT_APP_FIREBASE_API_KEY
+# REACT_APP_FIREBASE_AUTH_DOMAIN
+# REACT_APP_FIREBASE_PROJECT_ID
+# REACT_APP_FIREBASE_STORAGE_BUCKET
+# REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+# REACT_APP_FIREBASE_APP_ID

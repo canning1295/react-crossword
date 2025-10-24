@@ -1,0 +1,8 @@
+# Netlify redirects for SPA routing and PWA
+# This ensures the service worker and PWA features work correctly
+
+# Service worker must be served from root
+/service-worker.js /service-worker.js 200
+
+# All other routes go to index.html for React Router
+/*    /index.html   200
