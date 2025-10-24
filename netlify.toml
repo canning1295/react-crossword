@@ -1,8 +1,11 @@
 # Netlify configuration for the React app
-# This file intentionally avoids setting a build command or publish directory,
-# since your site may build either the example app or the docs. Configure those
-# in the Netlify UI as needed. We do include a SPA redirect so client-side
-# routing works regardless of the chosen output.
+# Building the example app which includes the crossword component demo
+# and Firebase database verification
+
+[build]
+  base = "example"
+  command = "npm run build"
+  publish = "build"
 
 [[redirects]]
   from = "/*"
