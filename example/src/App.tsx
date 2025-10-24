@@ -10,6 +10,7 @@ import Crossword, {
   useIpuz,
 } from '@jaredreisinger/react-crossword';
 import styled from 'styled-components';
+import DbVerification from './DbVerification';
 
 const data = {
   across: {
@@ -517,6 +518,8 @@ function App() {
         component. It exercises most of the functionality, so that you can see
         how to do so.
       </p>
+
+      <DbVerification />
 
       <Commands>
         <Command onClick={focus}>Focus</Command>

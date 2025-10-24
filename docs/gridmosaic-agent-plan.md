@@ -17,8 +17,11 @@ This document is a step-by-step guide for turning the existing `react-crossword`
 2. **App Shell**: Vite + `vite-plugin-pwa` for fast builds and service worker generation. (Docs: https://vitejs.dev/guide/ & https://vite-pwa-org.netlify.app/)
 3. **Styling**: Tailwind CSS or CSS Modules + ThemeProvider for crossword theming; pick whichever matches contributor preference.
 4. **State Management**: React Query (`@tanstack/react-query`) for async data flows + context providers for lightweight global state.
-5. **Firebase**: Use Firestore for data, Authentication for user identity (Google & email providers), Storage for optional bulk puzzle uploads, and Hosting if desired. (Docs: https://firebase.google.com/docs)
-6. **IPUZ Support**: Rely on existing `ipuz.ts` utilities; extend as needed for validation and conversion.
+5. **Firebase**: Use Firestore for data, Authentication for user identity (Google & email providers), Storage for optional bulk puzzle uploads. (Docs: https://firebase.google.com/docs)
+   - ✅ **Current Setup**: Firebase project `projectdb-f4ac8` is configured with Firestore, Authentication (Google Sign-In), and environment variables ready.
+6. **Deployment**: Netlify with CLI support for local development and production hosting.
+   - ✅ **Current Setup**: Netlify CLI configured, ready for `netlify dev` and `netlify deploy`.
+7. **IPUZ Support**: Rely on existing `ipuz.ts` utilities; extend as needed for validation and conversion.
 
 ---
 
@@ -130,8 +133,11 @@ Design inspiration references:
    - Integration tests with Testing Library + MSW.
    - E2E smoke test via Playwright or Cypress.
 9. **Deployment**
-   - Build pipeline via GitHub Actions.
-   - Deploy to Firebase Hosting (or Vercel); ensure service worker served correctly.
+   - ✅ **Netlify CLI is configured** for local development (`netlify dev`).
+   - ✅ **Firebase database is operational** (Project: `projectdb-f4ac8`, Firestore + Auth enabled).
+   - Build pipeline via GitHub Actions (optional).
+   - Deploy to Netlify; ensure all Firebase environment variables are set in Netlify dashboard.
+   - Ensure service worker and PWA manifest are served correctly.
 
 ---
 
