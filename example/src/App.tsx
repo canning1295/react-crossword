@@ -334,7 +334,6 @@ const ActionRow = styled.div`
   flex-wrap: wrap;
   gap: 1rem;
   align-items: center;
-  justify-content: space-between;
 `;
 
 const ActionSelect = styled.select`
@@ -1578,29 +1577,7 @@ function PuzzleScreen({
           <option value="check-word">Check word</option>
           <option value="check-puzzle">Check puzzle</option>
         </ActionSelect>
-        <ActionsGroup>
-          <Button type="button" onClick={focus}>
-            Focus grid
-          </Button>
-          <Button type="button" onClick={reset}>
-            Reset puzzle
-          </Button>
-          <Button type="button" onClick={onToggleDarkMode}>
-            {darkMode ? '☀️ Light mode' : '🌙 Dark mode'}
-          </Button>
-        </ActionsGroup>
       </ActionRow>
-      <StatsBar>
-        <Stat>
-          <strong>Time</strong> {formatTime(timer)}
-        </Stat>
-        <Stat>
-          <strong>Progress</strong> {progress}%
-        </Stat>
-        <Stat>
-          <strong>Hints</strong> {hintsUsed}
-        </Stat>
-      </StatsBar>
       <CrosswordFrame>
         <CrosswordGrid />
       </CrosswordFrame>
