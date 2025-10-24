@@ -701,7 +701,7 @@ function App() {
 
         if (createdEntry) {
           setActiveDifficulty('all');
-          setSelectedPuzzleId(createdEntry.id);
+          setSelectedPuzzleId((createdEntry as PuzzleLibraryEntry).id);
           setScreen('start');
         }
 

@@ -158,6 +158,7 @@ export interface IpuzPuzzle {
   copyright?: string;
   publisher?: string;
   difficulty?: string;
+  date?: string;
   empty?: string;
   block?: string;
   intro?: string;
