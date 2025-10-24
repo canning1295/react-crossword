@@ -1,0 +1,65 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is the owner
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Helper function to check if user has curator role
+    function isCurator() {
+      return request.auth.token.curator == true;
+    }
+    
+    // User profiles collection
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isSignedIn() && isOwner(userId);
+      // Users can create/update their own profile
+      allow create, update: if isSignedIn() && isOwner(userId);
+      // Only the user can delete their profile
+      allow delete: if isSignedIn() && isOwner(userId);
+    }
+    
+    // Puzzles collection
+    match /puzzles/{puzzleId} {
+      // Anyone can read published puzzles
+      allow read: if resource.data.status == 'published' || isSignedIn();
+      // Only curators can create puzzles
+      allow create: if isSignedIn() && isCurator();
+      // Only curators or puzzle creator can update
+      allow update: if isSignedIn() && (isCurator() || isOwner(resource.data.createdBy));
+      // Only curators can delete puzzles
+      allow delete: if isSignedIn() && isCurator();
+    }
+    
+    // User progress collection
+    match /progress/{userId} {
+      // Users can only read/write their own progress
+      allow read, write: if isSignedIn() && isOwner(userId);
+      
+      // Subcollection for individual puzzle progress
+      match /puzzles/{puzzleId} {
+        allow read, write: if isSignedIn() && isOwner(userId);
+      }
+    }
+    
+    // Leaderboards collection (read-only for users, write for cloud functions)
+    match /leaderboards/{leaderboardId} {
+      allow read: if true;
+      allow write: if false; // Only cloud functions can write
+    }
+    
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

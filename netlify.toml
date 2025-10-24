@@ -1,0 +1,18 @@
+# Netlify configuration for the React app
+# This file intentionally avoids setting a build command or publish directory,
+# since your site may build either the example app or the docs. Configure those
+# in the Netlify UI as needed. We do include a SPA redirect so client-side
+# routing works regardless of the chosen output.
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Security headers can be added here if needed
+# [[headers]]
+#   for = "/*"
+#   [headers.values]
+#   X-Frame-Options = "SAMEORIGIN"
+#   X-Content-Type-Options = "nosniff"
+#   Referrer-Policy = "strict-origin-when-cross-origin"
