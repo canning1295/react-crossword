@@ -53,6 +53,94 @@ function ensureUniqueId(base: string, existing: PuzzleLibraryEntry[]) {
   return `${fallback}-${index}`;
 }
 
+const IPUZZLER_PUZZLE_SOURCE =
+  'https://api.github.com/repos/dylanbeattie/ipuzzler/contents/gh-pages/puzzles';
+const MAX_REMOTE_PUZZLES = 20;
+
+interface GithubContentItem {
+  name: string;
+  download_url?: string;
+  type: string;
+}
+
+interface PendingRemoteEntry {
+  baseId: string;
+  label: string;
+  ipuz: IpuzPuzzle;
+  signature: string;
+  difficulty?: string;
+  author?: string;
+}
+
+type PuzzleProgressState = 'not-started' | 'in-progress' | 'completed';
+
+const progressStatusLabels: Record<PuzzleProgressState, string> = {
+  'not-started': '',
+  'in-progress': 'In progress',
+  completed: 'Completed',
+};
+
+const progressOrdering: PuzzleProgressState[] = [
+  'in-progress',
+  'not-started',
+  'completed',
+];
+
+function prettifyLabelFromFilename(name: string) {
+  return name
+    .replace(/\.ipuz$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getSolutionCharacter(
+  cell: unknown,
+  blockValue: string,
+  emptyValue: string
+) {
+  if (cell === null || cell === undefined) {
+    return null;
+  }
+
+  if (typeof cell === 'string') {
+    if (
+      cell === '' ||
+      cell === '#' ||
+      cell === blockValue ||
+      cell === emptyValue
+    ) {
+      return null;
+    }
+    return cell;
+  }
+
+  if (typeof cell === 'number') {
+    if (cell === 0) {
+      return null;
+    }
+    return cell.toString();
+  }
+
+  if (typeof cell === 'object') {
+    const maybeValue = (cell as { value?: unknown }).value;
+    if (typeof maybeValue === 'string') {
+      if (
+        maybeValue === '' ||
+        maybeValue === '#' ||
+        maybeValue === blockValue ||
+        maybeValue === emptyValue
+      ) {
+        return null;
+      }
+      return maybeValue;
+    }
+  }
+
+  return null;
+}
+
 const GlobalStyle = createGlobalStyle<{ darkMode: boolean }>`
   *, *::before, *::after {
     box-sizing: border-box;
@@ -460,6 +548,90 @@ function App() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [allowHints, setAllowHints] = useState(true);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(true);
+  const [puzzleStoreStatus, setPuzzleStoreStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  const [puzzleStoreError, setPuzzleStoreError] = useState<string | null>(null);
+  const [remotePuzzleCount, setRemotePuzzleCount] = useState(0);
+  const [puzzleProgress, setPuzzleProgress] = useState<
+    Record<string, PuzzleProgressState>
+  >({});
+
+  const computePuzzleProgress = useCallback(
+    (entry: PuzzleLibraryEntry): PuzzleProgressState => {
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return 'not-started';
+      }
+      try {
+        const storageKey = `ipuz-${entry.id}`;
+        const raw = window.localStorage.getItem(storageKey);
+        if (!raw) {
+          return 'not-started';
+        }
+        const parsed = JSON.parse(raw) as {
+          guesses?: Record<string, string> | null;
+        };
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          !parsed.guesses ||
+          typeof parsed.guesses !== 'object'
+        ) {
+          return 'not-started';
+        }
+        const guesses = parsed.guesses as Record<string, string>;
+        if (Object.keys(guesses).length === 0) {
+          return 'not-started';
+        }
+        const blockValue =
+          typeof entry.ipuz.block === 'string' ? entry.ipuz.block : '#';
+        const emptyValue =
+          typeof entry.ipuz.empty === 'string' ? entry.ipuz.empty : '0';
+        let total = 0;
+        let correct = 0;
+        entry.ipuz.solution.forEach((row, r) => {
+          row.forEach((cell, c) => {
+            const expected = getSolutionCharacter(cell, blockValue, emptyValue);
+            if (!expected) {
+              return;
+            }
+            total += 1;
+            const guess = guesses[`${r}_${c}`];
+            if (typeof guess === 'string' && guess.trim()) {
+              if (guess.toUpperCase() === expected.toUpperCase()) {
+                correct += 1;
+              }
+            }
+          });
+        });
+        if (total === 0) {
+          return 'not-started';
+        }
+        if (correct === total) {
+          return 'completed';
+        }
+        return 'in-progress';
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn('Unable to determine puzzle progress', error);
+        return 'not-started';
+      }
+    },
+    []
+  );
+
+  const refreshProgress = useCallback(() => {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    setPuzzleProgress((prev) => {
+      const next: Record<string, PuzzleProgressState> = {};
+      library.forEach((entry) => {
+        next[entry.id] = computePuzzleProgress(entry);
+      });
+      return next;
+    });
+  }, [computePuzzleProgress, library]);
 
   const difficultyOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -476,6 +648,16 @@ function App() {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [library]);
 
+  useEffect(() => {
+    refreshProgress();
+  }, [library, refreshProgress]);
+
+  useEffect(() => {
+    if (screen === 'start') {
+      refreshProgress();
+    }
+  }, [refreshProgress, screen]);
+
   const filteredLibrary = useMemo(() => {
     if (activeDifficulty === 'all') {
       return library;
@@ -487,32 +669,206 @@ function App() {
     );
   }, [activeDifficulty, library]);
 
+  const orderedLibrary = useMemo(() => {
+    const grouped: Record<PuzzleProgressState, PuzzleLibraryEntry[]> = {
+      'in-progress': [],
+      'not-started': [],
+      completed: [],
+    };
+    filteredLibrary.forEach((entry) => {
+      const status = puzzleProgress[entry.id] ?? 'not-started';
+      grouped[status].push(entry);
+    });
+    const sortByLabel = (a: PuzzleLibraryEntry, b: PuzzleLibraryEntry) =>
+      a.label.localeCompare(b.label);
+    return progressOrdering.flatMap((status) =>
+      grouped[status].sort(sortByLabel)
+    );
+  }, [filteredLibrary, puzzleProgress]);
+
   useEffect(() => {
-    if (activeDifficulty !== 'all' && filteredLibrary.length === 0) {
+    if (activeDifficulty !== 'all' && orderedLibrary.length === 0) {
       setActiveDifficulty('all');
     }
-  }, [activeDifficulty, filteredLibrary.length]);
+  }, [activeDifficulty, orderedLibrary.length]);
 
   useEffect(() => {
-    if (filteredLibrary.length === 0) {
+    if (orderedLibrary.length === 0) {
       return;
     }
-    if (!filteredLibrary.some((entry) => entry.id === selectedPuzzleId)) {
-      setSelectedPuzzleId(filteredLibrary[0].id);
+    if (!orderedLibrary.some((entry) => entry.id === selectedPuzzleId)) {
+      setSelectedPuzzleId(orderedLibrary[0].id);
     }
-  }, [filteredLibrary, selectedPuzzleId]);
+  }, [orderedLibrary, selectedPuzzleId]);
 
   const selectedPuzzle = useMemo(() => {
-    if (filteredLibrary.length === 0) {
+    if (orderedLibrary.length === 0) {
       return null;
     }
     return (
-      filteredLibrary.find((entry) => entry.id === selectedPuzzleId) ||
-      filteredLibrary[0]
+      orderedLibrary.find((entry) => entry.id === selectedPuzzleId) ||
+      orderedLibrary[0]
     );
-  }, [filteredLibrary, selectedPuzzleId]);
+  }, [orderedLibrary, selectedPuzzleId]);
 
   const crosswordData = useIpuz(selectedPuzzle?.ipuz ?? null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const loadRemotePuzzles = async () => {
+      try {
+        setPuzzleStoreStatus('loading');
+        setPuzzleStoreError(null);
+
+        const indexResponse = await fetch(IPUZZLER_PUZZLE_SOURCE);
+        if (!indexResponse.ok) {
+          throw new Error(`GitHub API responded with ${indexResponse.status}`);
+        }
+
+        const files = (await indexResponse.json()) as GithubContentItem[];
+        const ipuzFiles = files
+          .filter(
+            (file) =>
+              file.type === 'file' &&
+              file.download_url &&
+              file.name.toLowerCase().endsWith('.ipuz')
+          )
+          .slice(0, MAX_REMOTE_PUZZLES);
+
+        if (ipuzFiles.length === 0) {
+          if (!cancelled) {
+            setPuzzleStoreStatus('ready');
+            setPuzzleStoreError(
+              'No community IPUZ puzzles were available to load.'
+            );
+          }
+          return;
+        }
+
+        const pending = (
+          await Promise.all(
+            ipuzFiles.map(async (file, index) => {
+              if (!file.download_url) {
+                return null;
+              }
+              try {
+                const puzzleResponse = await fetch(file.download_url);
+                if (!puzzleResponse.ok) {
+                  throw new Error(`HTTP ${puzzleResponse.status}`);
+                }
+                const parsed = (await puzzleResponse.json()) as unknown;
+                if (!isIpuzCrossword(parsed)) {
+                  return null;
+                }
+                const ipuz = parsed as IpuzPuzzle;
+                const signature = createPuzzleSignature(ipuz);
+                const label =
+                  ipuz.title?.trim() || prettifyLabelFromFilename(file.name);
+                const baseIdSource =
+                  (ipuz.uniqueid && ipuz.uniqueid.trim()) ||
+                  label ||
+                  file.name.replace(/\.ipuz$/i, '');
+                return {
+                  baseId: slugify(baseIdSource) || `ipuzzler-${index + 1}`,
+                  label,
+                  ipuz,
+                  signature,
+                  difficulty: ipuz.difficulty,
+                  author: ipuz.author,
+                } satisfies PendingRemoteEntry;
+              } catch (error) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  'Failed to load remote IPUZ puzzle',
+                  file.name,
+                  error
+                );
+                return null;
+              }
+            })
+          )
+        ).filter((entry): entry is PendingRemoteEntry => entry !== null);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (pending.length === 0) {
+          setPuzzleStoreStatus('ready');
+          setPuzzleStoreError(
+            'All community puzzles are already in your library.'
+          );
+          return;
+        }
+
+        let added = 0;
+        setLibrary((prev) => {
+          let next = [...prev];
+          pending.forEach((entry, index) => {
+            const duplicate =
+              next.some((existing) => existing.signature === entry.signature) ||
+              (entry.ipuz.uniqueid &&
+                next.some(
+                  (existing) => existing.ipuz.uniqueid === entry.ipuz.uniqueid
+                ));
+            if (duplicate) {
+              return;
+            }
+            const baseId = entry.baseId || `ipuzzler-${index + 1}`;
+            const id = ensureUniqueId(baseId, next);
+            next.push({
+              id,
+              label: entry.label,
+              ipuz: entry.ipuz,
+              difficulty: entry.difficulty,
+              author: entry.author,
+              signature: entry.signature,
+            });
+            added += 1;
+          });
+          if (added === 0) {
+            return prev;
+          }
+          return next.sort((a, b) => a.label.localeCompare(b.label));
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (added > 0) {
+          setRemotePuzzleCount(added);
+          setPuzzleStoreStatus('ready');
+        } else {
+          setPuzzleStoreStatus('ready');
+          setPuzzleStoreError(
+            'All community puzzles are already in your library.'
+          );
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setPuzzleStoreStatus('error');
+        setPuzzleStoreError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load community puzzles.'
+        );
+      }
+    };
+
+    loadRemotePuzzles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const theme = useMemo(
     () => ({
@@ -628,9 +984,10 @@ function App() {
         setIsPlaying(false);
         setShowCelebration(true);
         setCompletedClues(totalClues);
+        refreshProgress();
       }
     },
-    [totalClues]
+    [refreshProgress, totalClues]
   );
 
   const onCellChange = useCallback<
@@ -736,7 +1093,8 @@ function App() {
     setScreen('start');
     setIsPlaying(false);
     setShowCelebration(false);
-  }, []);
+    refreshProgress();
+  }, [refreshProgress]);
 
   const registerHintUsage = useCallback(
     (count: number) => {
@@ -768,6 +1126,23 @@ function App() {
                   <StartDescription>
                     Pick a puzzle and configure your game options to begin.
                   </StartDescription>
+                  {puzzleStoreStatus === 'loading' && (
+                    <StartDescription role="status">
+                      Loading community puzzles from the iPuzzler project…
+                    </StartDescription>
+                  )}
+                  {puzzleStoreStatus === 'ready' && remotePuzzleCount > 0 && (
+                    <StartDescription role="status">
+                      Added {remotePuzzleCount}{' '}
+                      {remotePuzzleCount === 1 ? 'puzzle' : 'puzzles'} from the
+                      open iPuzzler collection.
+                    </StartDescription>
+                  )}
+                  {puzzleStoreError && (
+                    <StartDescription role="status">
+                      {puzzleStoreError}
+                    </StartDescription>
+                  )}
                 </div>
                 <Button
                   type="button"
@@ -801,14 +1176,24 @@ function App() {
                         onChange={(event) =>
                           setSelectedPuzzleId(event.target.value)
                         }
-                        disabled={filteredLibrary.length === 0}
+                        disabled={orderedLibrary.length === 0}
                       >
-                        {filteredLibrary.map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.label}
-                            {entry.difficulty ? ` (${entry.difficulty})` : ''}
-                          </option>
-                        ))}
+                        {orderedLibrary.map((entry) => {
+                          const status =
+                            puzzleProgress[entry.id] ?? 'not-started';
+                          const statusLabel = progressStatusLabels[status];
+                          const difficultySuffix = entry.difficulty
+                            ? ` (${entry.difficulty})`
+                            : '';
+                          const statusSuffix = statusLabel
+                            ? ` — ${statusLabel}`
+                            : '';
+                          return (
+                            <option key={entry.id} value={entry.id}>
+                              {`${entry.label}${difficultySuffix}${statusSuffix}`}
+                            </option>
+                          );
+                        })}
                       </SelectControl>
                     </SelectRow>
                   </div>

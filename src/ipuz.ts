@@ -6,6 +6,15 @@ import { CluesInputOriginal, ClueTypeOriginal } from './types';
  * Note that only the fields/values supported by this crossword component are
  * used.
  */
+type IpuzClueEntry =
+  | [number, string]
+  | {
+      number?: number;
+      clue?: string;
+      text?: string;
+      label?: string;
+    };
+
 export interface IpuzInput {
   /** IPUZ version for this puzzle */
   version: string;
@@ -71,8 +80,8 @@ export interface IpuzInput {
   /** The final answer to the puzzle */
   answer?: unknown; // how is this different from solution?
 
-  /** Clue sets (each set is array of clue-num, clue tuples.) */
-  clues: Record<'Across' | 'Down', [number, string][]>;
+  /** Clue sets (each set is array of clue-num, clue tuples or objects.) */
+  clues: Record<'Across' | 'Down', IpuzClueEntry[]>;
 
   saved?: unknown; // not supported!
   showenumerations?: unknown; // not supported!
@@ -144,30 +153,142 @@ export function isSupportedIpuz(ipuz: IpuzInput) {
   return true;
 }
 
+function extractSolutionChar(
+  cell: unknown,
+  blockValue: string,
+  emptyValue: string
+) {
+  if (cell === null || cell === undefined) {
+    return null;
+  }
+
+  if (typeof cell === 'string') {
+    if (
+      cell === '' ||
+      cell === blockValue ||
+      cell === emptyValue ||
+      cell === '#'
+    ) {
+      return null;
+    }
+    return cell;
+  }
+
+  if (typeof cell === 'number') {
+    if (cell === 0) {
+      return null;
+    }
+    return cell.toString();
+  }
+
+  if (typeof cell === 'object') {
+    const maybeValue = (cell as { value?: unknown }).value;
+    if (typeof maybeValue === 'string') {
+      if (
+        maybeValue === '' ||
+        maybeValue === blockValue ||
+        maybeValue === emptyValue ||
+        maybeValue === '#'
+      ) {
+        return null;
+      }
+      return maybeValue;
+    }
+  }
+
+  return null;
+}
+
 /** Converts an IPUZ crossword to our internal format. */
 export function convertIpuz(ipuz: IpuzInput): CluesInputOriginal {
+  const blockValue = typeof ipuz.block === 'string' ? ipuz.block : '#';
+  const emptyValue = typeof ipuz.empty === 'string' ? ipuz.empty : '0';
+
   // loop through the puzzle and figure out the row/col of each clue...
   const clueLocs = ipuz.puzzle.reduce<
     Record<string, { row: number; col: number }>
   >(
     (memoOuter, rowData, row) =>
       rowData.reduce((memoInner, cell, col) => {
-        const key = typeof cell === 'object' ? cell?.cell ?? -1 : cell;
-        memoInner[key.toString()] = { row, col };
+        let key: unknown;
+        if (cell && typeof cell === 'object') {
+          key = (cell as { cell?: unknown }).cell;
+        } else {
+          key = cell;
+        }
+
+        let clueNumber: number | null = null;
+        if (typeof key === 'number') {
+          clueNumber = key;
+        } else if (typeof key === 'string') {
+          const parsed = Number.parseInt(key, 10);
+          if (!Number.isNaN(parsed)) {
+            clueNumber = parsed;
+          }
+        }
+
+        if (clueNumber !== null && clueNumber > 0) {
+          memoInner[clueNumber.toString()] = { row, col };
+        }
+
         return memoInner;
       }, memoOuter),
     {}
   );
 
-  // console.log('GOT CLUE LOCS', clueLocs);
   const converted: CluesInputOriginal = Object.fromEntries(
-    (
-      Object.entries(ipuz.clues) as ['Across' | 'Down', [number, string][]][]
-    ).map(([dir, clueList]) => {
-      const dirClues = clueList.reduce<Record<string, ClueTypeOriginal>>(
-        (memo, [num, clueText]) => {
-          // console.log('looking for', dir, num);
-          const { row, col } = clueLocs[num.toString()];
+    (Object.entries(ipuz.clues) as ['Across' | 'Down', IpuzClueEntry[]][]).map(
+      ([dir, clueList]) => {
+        const normalizedClues = clueList
+          .map((entry) => {
+            if (Array.isArray(entry) && entry.length >= 2) {
+              const [rawNum, rawClue] = entry;
+              const num =
+                typeof rawNum === 'number'
+                  ? rawNum
+                  : Number.parseInt(String(rawNum), 10);
+              const clueText = String(rawClue);
+              if (!Number.isNaN(num) && clueText) {
+                return { number: num, clue: clueText };
+              }
+              return null;
+            }
+
+            if (entry && typeof entry === 'object') {
+              const numberValue = (entry as { number?: unknown }).number;
+              const clueValue =
+                (entry as { clue?: unknown }).clue ??
+                (entry as { text?: unknown }).text ??
+                (entry as { label?: unknown }).label;
+
+              const num =
+                typeof numberValue === 'number'
+                  ? numberValue
+                  : typeof numberValue === 'string'
+                  ? Number.parseInt(numberValue, 10)
+                  : null;
+              const clueText =
+                typeof clueValue === 'string' ? clueValue : undefined;
+
+              if (num !== null && !Number.isNaN(num) && clueText) {
+                return { number: num, clue: clueText };
+              }
+            }
+
+            return null;
+          })
+          .filter(
+            (value): value is { number: number; clue: string } => value !== null
+          );
+
+        const dirClues = normalizedClues.reduce<
+          Record<string, ClueTypeOriginal>
+        >((memo, { number: num, clue: clueText }) => {
+          const location = clueLocs[num.toString()];
+          if (!location) {
+            return memo;
+          }
+          const { row, col } = location;
           // get the answer by inspecting the solution grid
           let answer = '';
           const dr = dir === 'Across' ? 0 : 1;
@@ -177,8 +298,12 @@ export function convertIpuz(ipuz: IpuzInput): CluesInputOriginal {
             r < ipuz.dimensions.height && c < ipuz.dimensions.width;
             r += dr, c += dc
           ) {
-            const ch = ipuz.solution[r][c];
-            if (!ch || ch === '#') {
+            const ch = extractSolutionChar(
+              ipuz.solution[r][c],
+              blockValue,
+              emptyValue
+            );
+            if (!ch) {
               break;
             }
             answer += ch;
@@ -192,12 +317,11 @@ export function convertIpuz(ipuz: IpuzInput): CluesInputOriginal {
           };
 
           return memo;
-        },
-        {}
-      );
+        }, {});
 
-      return [directionMap[dir], dirClues];
-    })
+        return [directionMap[dir], dirClues];
+      }
+    )
   ) as CluesInputOriginal;
 
   return converted;
