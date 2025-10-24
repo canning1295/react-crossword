@@ -58,6 +58,42 @@ const simpleExpected: CluesInputOriginal = {
   },
 };
 
+const ipuzzlerStyleIpuz: IpuzInput = {
+  version: 'http://ipuz.org/v2',
+  kind: ['http://ipuz.org/crossword#1'],
+  block: '#',
+  empty: ':',
+  dimensions: { width: 2, height: 2 },
+  puzzle: [
+    [1, ':'],
+    [2, '#'],
+  ],
+  solution: [
+    [
+      { value: 'A', cell: 1 },
+      { value: 'B', cell: ':' },
+    ],
+    [{ value: 'C', cell: 2 }, '#'],
+  ],
+  clues: {
+    Across: [
+      { number: 1, clue: 'Row one across' },
+      { number: 2, clue: 'Bottom left letter' },
+    ],
+    Down: [{ number: 1, clue: 'Column one down' }],
+  },
+};
+
+const ipuzzlerStyleExpected: CluesInputOriginal = {
+  across: {
+    1: { clue: 'Row one across', answer: 'AB', row: 0, col: 0 },
+    2: { clue: 'Bottom left letter', answer: 'C', row: 1, col: 0 },
+  },
+  down: {
+    1: { clue: 'Column one down', answer: 'AC', row: 0, col: 0 },
+  },
+};
+
 describe('isIpuzData()', () => {
   it('recognizes the sample data', () => {
     expect(isIpuzData(simpleIpuz)).toBeTruthy();
@@ -77,6 +113,10 @@ describe('isSupportedIpuz()', () => {
 describe('convertIpuz()', () => {
   it('can convert a simple IPUZ crossword', () => {
     expect(convertIpuz(simpleIpuz)).toEqual(simpleExpected);
+  });
+
+  it('can convert puzzles with clue objects and solution value wrappers', () => {
+    expect(convertIpuz(ipuzzlerStyleIpuz)).toEqual(ipuzzlerStyleExpected);
   });
 
   it('can convert a more-complicated IPUZ sample', () => {
