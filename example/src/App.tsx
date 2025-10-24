@@ -1,11 +1,13 @@
 import React, {
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import {
+  CrosswordContext,
   CrosswordGrid,
   CrosswordProvider,
   CrosswordProviderImperative,
@@ -13,7 +15,11 @@ import {
   DirectionClues,
   useIpuz,
 } from '@jaredreisinger/react-crossword';
-import styled, { createGlobalStyle, ThemeProvider } from 'styled-components';
+import styled, {
+  createGlobalStyle,
+  ThemeProvider,
+  css,
+} from 'styled-components';
 import {
   puzzles as initialPuzzles,
   normalizeDifficulty,
@@ -71,22 +77,80 @@ const AppShell = styled.div`
   flex-direction: column;
 `;
 
-const TopBar = styled.header`
+const StartScreen = styled.main`
+  flex: 1;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 1.25rem 1.5rem;
-  background: ${(props) => props.theme.panel};
-  border-bottom: 1px solid ${(props) => props.theme.border};
+  justify-content: center;
+  padding: 2rem 1.5rem;
 `;
 
-const ControlGroup = styled.div`
+const StartCard = styled.div`
+  width: min(720px, 100%);
+  background: ${(props) => props.theme.panel};
+  border: 1px solid ${(props) => props.theme.border};
+  border-radius: 16px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+`;
+
+const StartHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+`;
+
+const StartTitle = styled.h1`
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+`;
+
+const StartDescription = styled.p`
+  margin: 0.25rem 0 0 0;
+  color: ${(props) => props.theme.muted};
+  font-size: 0.95rem;
+`;
+
+const SectionTitle = styled.h2`
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+`;
+
+const SelectRow = styled.div`
   display: flex;
   flex-wrap: wrap;
+  gap: 1rem;
+`;
+
+const OptionsGroup = styled.div`
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
+`;
+
+const CheckboxLabel = styled.label`
+  display: inline-flex;
   align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+`;
+
+const Checkbox = styled.input.attrs({ type: 'checkbox' })`
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: ${(props) => props.theme.accent};
+`;
+
+const StartButtons = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
 `;
 
 const SelectControl = styled.select`
@@ -129,45 +193,76 @@ const ImportNotice = styled.p`
   font-size: 0.9rem;
 `;
 
-const MainContent = styled.main`
+const PuzzleScreenContainer = styled.main`
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
   padding: 1.5rem;
-
-  @media (min-width: 1024px) {
-    flex-direction: row;
-    align-items: flex-start;
-  }
 `;
 
-const BoardColumn = styled.section`
-  flex: 2 1 60%;
+const PuzzleHeader = styled.header`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+`;
+
+const BackButton = styled.button`
+  border: none;
+  background: none;
+  color: ${(props) => props.theme.text};
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+`;
+
+const MetaContainer = styled.div`
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  align-items: flex-end;
+  text-align: right;
+  gap: 0.35rem;
 `;
 
-const CluesColumn = styled.aside`
-  flex: 1 1 40%;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-`;
-
-const PuzzleTitle = styled.h1`
+const MetaTitle = styled.h1`
   margin: 0;
-  font-size: 1.65rem;
+  font-size: 1.5rem;
   font-weight: 600;
 `;
 
-const PuzzleMeta = styled.div`
+const MetaDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: ${(props) => props.theme.muted};
+  font-size: 0.95rem;
+`;
+
+const ActionRow = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
-  font-size: 0.9rem;
-  color: ${(props) => props.theme.muted};
+  align-items: center;
+  justify-content: space-between;
+`;
+
+const ActionSelect = styled.select`
+  min-width: 12rem;
+  border: 1px solid ${(props) => props.theme.border};
+  background: ${(props) => props.theme.panel};
+  color: ${(props) => props.theme.text};
+  border-radius: 6px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.95rem;
+`;
+
+const ActionsGroup = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 `;
 
 const StatsBar = styled.div`
@@ -175,6 +270,7 @@ const StatsBar = styled.div`
   gap: 1.25rem;
   font-size: 0.95rem;
   color: ${(props) => props.theme.muted};
+  flex-wrap: wrap;
 `;
 
 const Stat = styled.span`
@@ -193,52 +289,124 @@ const CrosswordFrame = styled.div`
   align-items: center;
 `;
 
-const BoardControls = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-`;
-
-const HintSelect = styled.select`
-  border: 1px solid ${(props) => props.theme.border};
-  background: ${(props) => props.theme.panel};
-  color: ${(props) => props.theme.text};
-  border-radius: 6px;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.95rem;
-`;
-
-const ClueSection = styled.section`
-  background: ${(props) => props.theme.panel};
-  border: 1px solid ${(props) => props.theme.border};
+const ActiveClueBox = styled.div<{
+  status: 'correct' | 'incorrect' | 'neutral';
+  showStatus: boolean;
+}>`
   border-radius: 12px;
-  padding: 1rem;
-  flex: 1;
-  min-height: 0;
+  border: 1px solid
+    ${(props) => {
+      if (!props.showStatus) {
+        return props.theme.border;
+      }
+      if (props.status === 'correct') {
+        return 'rgba(46, 160, 67, 0.35)';
+      }
+      if (props.status === 'incorrect') {
+        return 'rgba(208, 44, 44, 0.45)';
+      }
+      return props.theme.border;
+    }};
+  background: ${(props) => {
+    if (!props.showStatus) {
+      return props.theme.panel;
+    }
+    if (props.status === 'correct') {
+      return 'rgba(46, 160, 67, 0.15)';
+    }
+    if (props.status === 'incorrect') {
+      return 'rgba(208, 44, 44, 0.15)';
+    }
+    return props.theme.panel;
+  }};
+  color: ${(props) => {
+    if (!props.showStatus) {
+      return props.theme.text;
+    }
+    if (props.status === 'correct') {
+      return '#1d7a2f';
+    }
+    if (props.status === 'incorrect') {
+      return '#b3261e';
+    }
+    return props.theme.text;
+  }};
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 72px;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+`;
+
+const ActiveClueLabel = styled.span`
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: ${(props) => props.theme.muted};
+`;
+
+const ActiveClueText = styled.span`
+  font-size: 1rem;
+`;
+
+const ClueLists = styled.div<{ showStatus: boolean }>`
+  display: grid;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+
+  @media (min-width: 768px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   .direction {
-    max-height: 60vh;
+    background: ${(props) => props.theme.panel};
+    border: 1px solid ${(props) => props.theme.border};
+    border-radius: 12px;
+    padding: 1rem;
+    max-height: 45vh;
     overflow-y: auto;
-    padding-right: 0.5rem;
   }
 
   .direction .header {
-    display: none;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: ${(props) => props.theme.muted};
   }
 
   .clue {
     font-size: 0.95rem;
     padding: 0.35rem 0;
+    display: flex;
+    align-items: baseline;
   }
-`;
 
-const ClueHeader = styled.h2`
-  margin: 0 0 0.75rem 0;
-  font-size: 0.9rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: ${(props) => props.theme.muted};
+  ${(props) =>
+    props.showStatus &&
+    css`
+      .clue.correct {
+        color: #1d7a2f;
+        font-weight: 600;
+      }
+
+      .clue.correct::after {
+        content: '✔';
+        margin-left: 0.5rem;
+      }
+
+      .clue.incorrect {
+        color: #b3261e;
+        font-weight: 600;
+      }
+
+      .clue.incorrect::after {
+        content: '✖';
+        margin-left: 0.5rem;
+      }
+    `}
 `;
 
 const EmptyState = styled.div`
@@ -282,18 +450,16 @@ function App() {
   );
   const [activeDifficulty, setActiveDifficulty] = useState('all');
   const [darkMode, setDarkMode] = useState(false);
-  const [hintChoice, setHintChoice] = useState('');
+  const [screen, setScreen] = useState<'start' | 'puzzle'>('start');
   const [timer, setTimer] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [completedClues, setCompletedClues] = useState(0);
   const [totalClues, setTotalClues] = useState(0);
   const [hintsUsed, setHintsUsed] = useState(0);
-  const [currentDirection, setCurrentDirection] = useState<'across' | 'down'>(
-    'across'
-  );
-  const [currentNumber, setCurrentNumber] = useState('1');
   const [showCelebration, setShowCelebration] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [allowHints, setAllowHints] = useState(true);
+  const [showCorrectAnswers, setShowCorrectAnswers] = useState(true);
 
   const difficultyOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -392,8 +558,6 @@ function App() {
     setTimer(0);
     setIsPlaying(false);
     setShowCelebration(false);
-    setCurrentDirection('across');
-    setCurrentNumber('1');
   }, [crosswordData]);
 
   useEffect(() => {
@@ -425,62 +589,6 @@ function App() {
 
   const focus = useCallback(() => {
     crosswordRef.current?.focus();
-  }, []);
-
-  const revealLetter = useCallback(() => {
-    if (!crosswordData) {
-      return;
-    }
-    if (!isPlaying) {
-      setIsPlaying(true);
-    }
-    const clueSet =
-      currentDirection === 'across' ? crosswordData.across : crosswordData.down;
-    const clue = clueSet?.[currentNumber];
-    if (!clue) {
-      return;
-    }
-    const { row, col, answer } = clue;
-    for (let i = 0; i < answer.length; i += 1) {
-      const targetRow = currentDirection === 'across' ? row : row + i;
-      const targetCol = currentDirection === 'across' ? col + i : col;
-      crosswordRef.current?.setGuess(targetRow, targetCol, answer[i]);
-      setHintsUsed((prev) => prev + 1);
-      break;
-    }
-  }, [crosswordData, currentDirection, currentNumber, isPlaying]);
-
-  const revealWord = useCallback(() => {
-    if (!crosswordData) {
-      return;
-    }
-    if (!isPlaying) {
-      setIsPlaying(true);
-    }
-    const clueSet =
-      currentDirection === 'across' ? crosswordData.across : crosswordData.down;
-    const clue = clueSet?.[currentNumber];
-    if (!clue) {
-      return;
-    }
-    const { row, col, answer } = clue;
-    for (let i = 0; i < answer.length; i += 1) {
-      const targetRow = currentDirection === 'across' ? row : row + i;
-      const targetCol = currentDirection === 'across' ? col + i : col;
-      crosswordRef.current?.setGuess(targetRow, targetCol, answer[i]);
-    }
-    setHintsUsed((prev) => prev + answer.length);
-  }, [crosswordData, currentDirection, currentNumber, isPlaying]);
-
-  const revealPuzzle = useCallback(() => {
-    if (
-      window.confirm(
-        'Reveal the entire puzzle? This cannot be undone for this attempt.'
-      )
-    ) {
-      crosswordRef.current?.fillAllAnswers();
-      setIsPlaying(false);
-    }
   }, []);
 
   const reset = useCallback(() => {
@@ -535,35 +643,6 @@ function App() {
     },
     [isPlaying]
   );
-
-  const onClueSelected = useCallback(
-    (direction: 'across' | 'down', number: string) => {
-      setCurrentDirection(direction);
-      setCurrentNumber(number);
-    },
-    []
-  );
-
-  const handleHintChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      setHintChoice(event.target.value);
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!hintChoice) {
-      return;
-    }
-    if (hintChoice === 'letter') {
-      revealLetter();
-    } else if (hintChoice === 'word') {
-      revealWord();
-    } else if (hintChoice === 'puzzle') {
-      revealPuzzle();
-    }
-    setHintChoice('');
-  }, [hintChoice, revealLetter, revealWord, revealPuzzle]);
 
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -623,6 +702,7 @@ function App() {
         if (createdEntry) {
           setActiveDifficulty('all');
           setSelectedPuzzleId(createdEntry.id);
+          setScreen('start');
         }
 
         setImportStatus(message || 'Puzzle imported.');
@@ -639,6 +719,38 @@ function App() {
     []
   );
 
+  const handleStartPuzzle = useCallback(() => {
+    if (!selectedPuzzle || !crosswordData) {
+      return;
+    }
+    setScreen('puzzle');
+    setShowCelebration(false);
+    setIsPlaying(false);
+    setTimer(0);
+    window.requestAnimationFrame(() => {
+      focus();
+    });
+  }, [crosswordData, focus, selectedPuzzle]);
+
+  const handleBackToStart = useCallback(() => {
+    setScreen('start');
+    setIsPlaying(false);
+    setShowCelebration(false);
+  }, []);
+
+  const registerHintUsage = useCallback(
+    (count: number) => {
+      if (count <= 0) {
+        return;
+      }
+      setHintsUsed((prev) => prev + count);
+      if (!isPlaying) {
+        setIsPlaying(true);
+      }
+    },
+    [isPlaying]
+  );
+
   const progress =
     totalClues > 0 ? Math.round((completedClues / totalClues) * 100) : 0;
 
@@ -646,51 +758,124 @@ function App() {
     <ThemeProvider theme={theme}>
       <GlobalStyle darkMode={darkMode} />
       <AppShell>
-        <TopBar>
-          <ControlGroup>
-            {difficultyOptions.length > 0 && (
-              <SelectControl
-                value={activeDifficulty}
-                onChange={(event) => setActiveDifficulty(event.target.value)}
-              >
-                <option value="all">All difficulties</option>
-                {difficultyOptions.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </SelectControl>
-            )}
-            <SelectControl
-              value={selectedPuzzle?.id ?? ''}
-              onChange={(event) => setSelectedPuzzleId(event.target.value)}
-              disabled={filteredLibrary.length === 0}
-            >
-              {filteredLibrary.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label}
-                  {entry.difficulty ? ` (${entry.difficulty})` : ''}
-                </option>
-              ))}
-            </SelectControl>
-            <Button type="button" onClick={handleImportClick}>
-              Import IPUZ
-            </Button>
-            <HiddenFileInput
-              ref={fileInputRef}
-              type="file"
-              accept=".ipuz,application/json"
-              onChange={handleImportFile}
-            />
-          </ControlGroup>
-          <ControlGroup>
-            <Button type="button" onClick={() => setDarkMode((prev) => !prev)}>
-              {darkMode ? '☀️ Light mode' : '🌙 Dark mode'}
-            </Button>
-          </ControlGroup>
-        </TopBar>
         {importStatus && <ImportNotice>{importStatus}</ImportNotice>}
-        {crosswordData && selectedPuzzle ? (
+        {screen === 'start' ? (
+          <StartScreen>
+            <StartCard>
+              <StartHeader>
+                <div>
+                  <StartTitle>Choose a crossword</StartTitle>
+                  <StartDescription>
+                    Pick a puzzle and configure your game options to begin.
+                  </StartDescription>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setDarkMode((prev) => !prev)}
+                >
+                  {darkMode ? '☀️ Light mode' : '🌙 Dark mode'}
+                </Button>
+              </StartHeader>
+              {library.length > 0 ? (
+                <>
+                  <div>
+                    <SectionTitle>Puzzle selection</SectionTitle>
+                    <SelectRow>
+                      {difficultyOptions.length > 0 && (
+                        <SelectControl
+                          value={activeDifficulty}
+                          onChange={(event) =>
+                            setActiveDifficulty(event.target.value)
+                          }
+                        >
+                          <option value="all">All difficulties</option>
+                          {difficultyOptions.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </SelectControl>
+                      )}
+                      <SelectControl
+                        value={selectedPuzzle?.id ?? ''}
+                        onChange={(event) =>
+                          setSelectedPuzzleId(event.target.value)
+                        }
+                        disabled={filteredLibrary.length === 0}
+                      >
+                        {filteredLibrary.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.label}
+                            {entry.difficulty ? ` (${entry.difficulty})` : ''}
+                          </option>
+                        ))}
+                      </SelectControl>
+                    </SelectRow>
+                  </div>
+                  {selectedPuzzle?.ipuz && (
+                    <MetaDetails>
+                      {selectedPuzzle.ipuz.author && (
+                        <span>Author: {selectedPuzzle.ipuz.author}</span>
+                      )}
+                      {selectedPuzzle.ipuz.date && (
+                        <span>Date: {selectedPuzzle.ipuz.date}</span>
+                      )}
+                      {(selectedPuzzle.ipuz.difficulty ||
+                        selectedPuzzle.difficulty) && (
+                        <span>
+                          Difficulty:{' '}
+                          {selectedPuzzle.ipuz.difficulty ||
+                            selectedPuzzle.difficulty}
+                        </span>
+                      )}
+                    </MetaDetails>
+                  )}
+                </>
+              ) : (
+                <EmptyState>No crosswords available.</EmptyState>
+              )}
+              <div>
+                <SectionTitle>Game options</SectionTitle>
+                <OptionsGroup>
+                  <CheckboxLabel>
+                    <Checkbox
+                      checked={allowHints}
+                      onChange={(event) => setAllowHints(event.target.checked)}
+                    />
+                    Allow hints
+                  </CheckboxLabel>
+                  <CheckboxLabel>
+                    <Checkbox
+                      checked={showCorrectAnswers}
+                      onChange={(event) =>
+                        setShowCorrectAnswers(event.target.checked)
+                      }
+                    />
+                    Show correct answers
+                  </CheckboxLabel>
+                </OptionsGroup>
+              </div>
+              <StartButtons>
+                <Button type="button" onClick={handleImportClick}>
+                  Import IPUZ
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleStartPuzzle}
+                  disabled={!selectedPuzzle || !crosswordData}
+                >
+                  Start puzzle
+                </Button>
+              </StartButtons>
+              <HiddenFileInput
+                ref={fileInputRef}
+                type="file"
+                accept=".ipuz,application/json"
+                onChange={handleImportFile}
+              />
+            </StartCard>
+          </StartScreen>
+        ) : crosswordData && selectedPuzzle ? (
           <CrosswordProvider
             key={selectedPuzzle.id}
             ref={crosswordRef}
@@ -701,71 +886,26 @@ function App() {
             onLoadedCorrect={onLoadedCorrect}
             onCrosswordCorrect={onCrosswordCorrect}
             onCellChange={onCellChange}
-            onClueSelected={onClueSelected}
           >
-            <MainContent>
-              <BoardColumn>
-                <div>
-                  <PuzzleTitle>{selectedPuzzle.label}</PuzzleTitle>
-                  <PuzzleMeta>
-                    {selectedPuzzle.ipuz.author && (
-                      <span>{selectedPuzzle.ipuz.author}</span>
-                    )}
-                    {selectedPuzzle.ipuz.difficulty && (
-                      <span>{selectedPuzzle.ipuz.difficulty}</span>
-                    )}
-                    {selectedPuzzle.ipuz.date && (
-                      <span>{selectedPuzzle.ipuz.date}</span>
-                    )}
-                  </PuzzleMeta>
-                </div>
-                <StatsBar>
-                  <Stat>
-                    <strong>Time</strong> {formatTime(timer)}
-                  </Stat>
-                  <Stat>
-                    <strong>Progress</strong> {progress}%
-                  </Stat>
-                  <Stat>
-                    <strong>Hints</strong> {hintsUsed}
-                  </Stat>
-                </StatsBar>
-                <CrosswordFrame>
-                  <CrosswordGrid />
-                </CrosswordFrame>
-                <BoardControls>
-                  <HintSelect
-                    value={hintChoice}
-                    onChange={handleHintChange}
-                    disabled={!crosswordData}
-                  >
-                    <option value="">Hints</option>
-                    <option value="letter">Reveal one letter</option>
-                    <option value="word">Reveal this answer</option>
-                    <option value="puzzle">Reveal the puzzle</option>
-                  </HintSelect>
-                  <Button type="button" onClick={focus}>
-                    Focus grid
-                  </Button>
-                  <Button type="button" onClick={reset}>
-                    Reset puzzle
-                  </Button>
-                </BoardControls>
-              </BoardColumn>
-              <CluesColumn>
-                <ClueSection>
-                  <ClueHeader>Across</ClueHeader>
-                  <DirectionClues direction="across" />
-                </ClueSection>
-                <ClueSection>
-                  <ClueHeader>Down</ClueHeader>
-                  <DirectionClues direction="down" />
-                </ClueSection>
-              </CluesColumn>
-            </MainContent>
+            <PuzzleScreen
+              puzzle={selectedPuzzle}
+              allowHints={allowHints}
+              showCorrectAnswers={showCorrectAnswers}
+              crosswordRef={crosswordRef}
+              onBack={handleBackToStart}
+              onUseHint={registerHintUsage}
+              focus={focus}
+              reset={reset}
+              formatTime={formatTime}
+              timer={timer}
+              progress={progress}
+              hintsUsed={hintsUsed}
+              onToggleDarkMode={() => setDarkMode((prev) => !prev)}
+              darkMode={darkMode}
+            />
           </CrosswordProvider>
         ) : (
-          <EmptyState>No crossword selected.</EmptyState>
+          <EmptyState>Unable to load the selected crossword.</EmptyState>
         )}
         <CelebrationOverlay show={showCelebration}>
           <CelebrationCard>
@@ -779,6 +919,322 @@ function App() {
         </CelebrationOverlay>
       </AppShell>
     </ThemeProvider>
+  );
+}
+
+interface PuzzleScreenProps {
+  puzzle: PuzzleLibraryEntry;
+  allowHints: boolean;
+  showCorrectAnswers: boolean;
+  crosswordRef: React.RefObject<CrosswordProviderImperative>;
+  onBack: () => void;
+  onUseHint: (count: number) => void;
+  focus: () => void;
+  reset: () => void;
+  formatTime: (seconds: number) => string;
+  timer: number;
+  progress: number;
+  hintsUsed: number;
+  onToggleDarkMode: () => void;
+  darkMode: boolean;
+}
+
+function PuzzleScreen({
+  puzzle,
+  allowHints,
+  showCorrectAnswers,
+  crosswordRef,
+  onBack,
+  onUseHint,
+  focus,
+  reset,
+  formatTime,
+  timer,
+  progress,
+  hintsUsed,
+  onToggleDarkMode,
+  darkMode,
+}: PuzzleScreenProps) {
+  const {
+    clues,
+    selectedDirection,
+    selectedNumber,
+    selectedPosition,
+    gridData,
+  } = useContext(CrosswordContext);
+
+  const activeClue = useMemo(() => {
+    if (!clues) {
+      return undefined;
+    }
+    return clues[selectedDirection].find(
+      (clueInfo) => clueInfo.number === selectedNumber
+    );
+  }, [clues, selectedDirection, selectedNumber]);
+
+  const activeStatus: 'correct' | 'incorrect' | 'neutral' =
+    showCorrectAnswers && activeClue?.complete
+      ? activeClue.correct
+        ? 'correct'
+        : 'incorrect'
+      : 'neutral';
+
+  const directionLabel = selectedDirection === 'down' ? 'Down' : 'Across';
+
+  const metaDetails = useMemo(() => {
+    const details: string[] = [];
+    if (puzzle.ipuz.author) {
+      details.push(`Author: ${puzzle.ipuz.author}`);
+    }
+    if (puzzle.ipuz.date) {
+      details.push(`Date: ${puzzle.ipuz.date}`);
+    }
+    if (puzzle.ipuz.difficulty || puzzle.difficulty) {
+      details.push(
+        `Difficulty: ${puzzle.ipuz.difficulty || puzzle.difficulty || ''}`
+      );
+    }
+    return details;
+  }, [puzzle]);
+
+  const revealCurrentSquare = useCallback(() => {
+    if (!allowHints) {
+      return;
+    }
+    const ref = crosswordRef.current;
+    if (!ref || gridData.length === 0) {
+      return;
+    }
+    const { row, col } = selectedPosition;
+    const cell = gridData[row]?.[col];
+    if (!cell || !cell.used) {
+      return;
+    }
+    if (cell.guess !== cell.answer) {
+      ref.setGuess(row, col, cell.answer);
+      onUseHint(1);
+    }
+  }, [allowHints, crosswordRef, gridData, onUseHint, selectedPosition]);
+
+  const revealCurrentWord = useCallback(() => {
+    if (!allowHints || !activeClue) {
+      return;
+    }
+    const ref = crosswordRef.current;
+    if (!ref) {
+      return;
+    }
+    const deltaRow = selectedDirection === 'across' ? 0 : 1;
+    const deltaCol = selectedDirection === 'across' ? 1 : 0;
+    let revealed = 0;
+    for (let i = 0; i < activeClue.answer.length; i += 1) {
+      const row = activeClue.row + deltaRow * i;
+      const col = activeClue.col + deltaCol * i;
+      const cell = gridData[row]?.[col];
+      if (!cell || !cell.used) {
+        continue;
+      }
+      if (cell.guess !== cell.answer) {
+        ref.setGuess(row, col, cell.answer);
+        revealed += 1;
+      }
+    }
+    if (revealed > 0) {
+      onUseHint(revealed);
+    }
+  }, [
+    activeClue,
+    allowHints,
+    crosswordRef,
+    gridData,
+    onUseHint,
+    selectedDirection,
+  ]);
+
+  const revealPuzzle = useCallback(() => {
+    if (!allowHints) {
+      return;
+    }
+    const ref = crosswordRef.current;
+    if (!ref) {
+      return;
+    }
+    let revealed = 0;
+    gridData.forEach((row) => {
+      row.forEach((cell) => {
+        if (cell.used && cell.guess !== cell.answer) {
+          ref.setGuess(cell.row, cell.col, cell.answer);
+          revealed += 1;
+        }
+      });
+    });
+    if (revealed > 0) {
+      onUseHint(revealed);
+    }
+  }, [allowHints, crosswordRef, gridData, onUseHint]);
+
+  const checkCurrentSquare = useCallback(() => {
+    const ref = crosswordRef.current;
+    if (!ref || gridData.length === 0) {
+      return;
+    }
+    const { row, col } = selectedPosition;
+    const cell = gridData[row]?.[col];
+    if (!cell || !cell.used || !cell.guess) {
+      return;
+    }
+    if (cell.guess !== cell.answer) {
+      ref.setGuess(row, col, '');
+    }
+  }, [crosswordRef, gridData, selectedPosition]);
+
+  const checkCurrentWord = useCallback(() => {
+    const ref = crosswordRef.current;
+    if (!ref || !activeClue) {
+      return;
+    }
+    const deltaRow = selectedDirection === 'across' ? 0 : 1;
+    const deltaCol = selectedDirection === 'across' ? 1 : 0;
+    for (let i = 0; i < activeClue.answer.length; i += 1) {
+      const row = activeClue.row + deltaRow * i;
+      const col = activeClue.col + deltaCol * i;
+      const cell = gridData[row]?.[col];
+      if (!cell || !cell.used || !cell.guess) {
+        continue;
+      }
+      if (cell.guess !== cell.answer) {
+        ref.setGuess(row, col, '');
+      }
+    }
+  }, [activeClue, crosswordRef, gridData, selectedDirection]);
+
+  const checkPuzzle = useCallback(() => {
+    const ref = crosswordRef.current;
+    if (!ref) {
+      return;
+    }
+    gridData.forEach((row) => {
+      row.forEach((cell) => {
+        if (cell.used && cell.guess && cell.guess !== cell.answer) {
+          ref.setGuess(cell.row, cell.col, '');
+        }
+      });
+    });
+  }, [crosswordRef, gridData]);
+
+  const handleActionChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const { value } = event.target;
+      if (!value) {
+        return;
+      }
+      switch (value) {
+        case 'reveal-square':
+          revealCurrentSquare();
+          break;
+        case 'reveal-word':
+          revealCurrentWord();
+          break;
+        case 'reveal-puzzle':
+          revealPuzzle();
+          break;
+        case 'check-square':
+          checkCurrentSquare();
+          break;
+        case 'check-word':
+          checkCurrentWord();
+          break;
+        case 'check-puzzle':
+          checkPuzzle();
+          break;
+        default:
+          break;
+      }
+      event.target.value = '';
+    },
+    [
+      checkCurrentSquare,
+      checkCurrentWord,
+      checkPuzzle,
+      revealCurrentSquare,
+      revealCurrentWord,
+      revealPuzzle,
+    ]
+  );
+
+  return (
+    <PuzzleScreenContainer>
+      <PuzzleHeader>
+        <BackButton type="button" onClick={onBack} aria-label="Back to start">
+          ←
+        </BackButton>
+        <MetaContainer>
+          <MetaTitle>{puzzle.label}</MetaTitle>
+          <MetaDetails>
+            {metaDetails.map((detail) => (
+              <span key={detail}>{detail}</span>
+            ))}
+          </MetaDetails>
+        </MetaContainer>
+      </PuzzleHeader>
+      <ActionRow>
+        <ActionSelect value="" onChange={handleActionChange}>
+          <option value="">Puzzle actions</option>
+          <option value="reveal-square" disabled={!allowHints}>
+            Reveal square
+          </option>
+          <option value="reveal-word" disabled={!allowHints}>
+            Reveal word
+          </option>
+          <option value="reveal-puzzle" disabled={!allowHints}>
+            Reveal puzzle
+          </option>
+          <option value="check-square">Check square</option>
+          <option value="check-word">Check word</option>
+          <option value="check-puzzle">Check puzzle</option>
+        </ActionSelect>
+        <ActionsGroup>
+          <Button type="button" onClick={focus}>
+            Focus grid
+          </Button>
+          <Button type="button" onClick={reset}>
+            Reset puzzle
+          </Button>
+          <Button type="button" onClick={onToggleDarkMode}>
+            {darkMode ? '☀️ Light mode' : '🌙 Dark mode'}
+          </Button>
+        </ActionsGroup>
+      </ActionRow>
+      <StatsBar>
+        <Stat>
+          <strong>Time</strong> {formatTime(timer)}
+        </Stat>
+        <Stat>
+          <strong>Progress</strong> {progress}%
+        </Stat>
+        <Stat>
+          <strong>Hints</strong> {hintsUsed}
+        </Stat>
+      </StatsBar>
+      <CrosswordFrame>
+        <CrosswordGrid />
+      </CrosswordFrame>
+      <ActiveClueBox status={activeStatus} showStatus={showCorrectAnswers}>
+        <ActiveClueLabel>Active clue</ActiveClueLabel>
+        {activeClue ? (
+          <ActiveClueText>
+            <strong>{selectedNumber}</strong> {directionLabel} —{' '}
+            {activeClue.clue}
+          </ActiveClueText>
+        ) : (
+          <ActiveClueText>Select a clue to begin solving.</ActiveClueText>
+        )}
+      </ActiveClueBox>
+      <ClueLists showStatus={showCorrectAnswers}>
+        <DirectionClues direction="across" />
+        <DirectionClues direction="down" />
+      </ClueLists>
+    </PuzzleScreenContainer>
   );
 }
 
